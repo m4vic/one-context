@@ -1,4 +1,7 @@
-# one-context
+<p align="center">
+  <img src="assets/1.png" alt="Logo" width="180">
+</p>
+
 
 one-context is a local background service that keeps project context compact and current.
 It is being shaped around a simple workflow:
