@@ -1,0 +1,28 @@
+version: 2
+
+project_name: one-context
+
+builds:
+  - id: one-context
+    main: ./cmd/one-context
+    binary: one-context
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/m4vic/one-context/internal/app.Version={{ .Version }}
+    goos: [windows, linux, darwin]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc

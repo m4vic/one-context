@@ -1,22 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-dist/
-build/
-*.egg
+# one-context generated project context
+.one-context/
 
-# Virtual environments
-.venv/
-venv/
-env/
-
-# Database
-*.db
-
-# one-context local mirror (grep-able snapshot; regenerate with `ctx sync`)
+# Local development and archived legacy artifacts
 .ctx/
+.claude/
+.pytest_cache/
+__pycache__/
+dist/
+*.exe
+*.exe~
+one-context
+# Legacy MCP code and its local runtime artifacts remain outside releases.
+archive/
 
 # IDE
 .idea/
@@ -28,11 +23,5 @@ env/
 .DS_Store
 Thumbs.db
 
-# Test artifacts
-test_mcp.py
-
 # Debug files
-mcp_debug.log
-claude_debug.log
-run_ctx_debug.bat
-run_claude_debug.bat
+*.log

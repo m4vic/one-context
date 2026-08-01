@@ -1,0 +1,15 @@
+[
+  {
+    "name": "no_change_handoff",
+    "project": "demo",
+    "handoff": "Continue the migration plan.",
+    "expect_prompt": ["Current state", "Continue the migration plan."]
+  },
+  {
+    "name": "credential_redaction",
+    "project": "secure-demo",
+    "diff_excerpt": "API_KEY=not-for-provider\n",
+    "expect_prompt": ["[redacted]"],
+    "forbid_prompt": ["not-for-provider"]
+  }
+]

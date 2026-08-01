@@ -1,128 +1,276 @@
-# one-context 0.6.0 — Slim Redesign
+# one-context production implementation plan
 
-> **Canonical plan.** The `ctx_doc(one-context-mcp, "plan")` entry is a published
-> mirror of this file for tools that pull context remotely; this file is the
-> source of truth. Keep them in sync when the plan changes materially.
+## Release target
 
-## Goal
+one-context is a local, cross-platform context compiler for Windows, macOS, and
+Linux. It watches registered repositories, compiles durable project state, and
+lets coding tools load the same handoff without an MCP server.
 
-The tool has exactly one job: **frictionless, correct context handoff between AI
-tools** (Codex ↔ Antigravity ↔ Claude Code). "Outstanding" here means
-**reliability + invisibility, not feature count.**
+The first public release is `v0.1.0-alpha.1`. It is a usable cross-platform
+alpha, not a stability promise. `v1.0.0` is reserved for a demonstrated stable
+artifact contract, installers, upgrades, observability, and release support.
 
-Shrink the model-facing tool surface to the essentials. Keep every capability —
-fold it into a parameter or move it to the CLI. Fewer tools = fewer wrong calls,
-fewer hang surfaces, a one-call handoff.
+## Product contract
 
-**Non-goals (explicitly out of scope):** full chat-transcript auto-capture (an
-MCP server cannot read the host tool's conversation — hard protocol boundary),
-per-tool integrations, more buckets, more tools.
+The system owns one project-local state directory:
 
-## Guarantees
+```text
+<project>/.one-context/
+  context.md       deterministic source of truth
+  llm-context.md   optional model-written handoff
+  project.json     structured evidence, schema, and fingerprint
+```
 
-- **DB schema + CLI: unchanged.** Existing `~/.ctx/ctx.db` works untouched — no
-  data migration. All `ctx <cmd>` CLI commands stay.
-- **Only the MCP tool layer shrinks.** The DB functions the tools call are kept.
-- **Clean break at 0.6.0**, no deprecated tool aliases (aliases would re-add the
-  surface we're removing). A loud migration note ships instead. Real risk is low:
-  model-facing tools are called by AI (which reads the live tool list +
-  `how_to_ctx`), not by scripts.
+`context.md` is generated from observable facts: Git state, changed paths,
+bounded diffs, selected project anchors, current task, and handoff state.
+`llm-context.md` is a derived summary. It must never replace the factual file,
+change the evidence fingerprint, or be required for a refresh to succeed.
 
-## The 5 model-facing tools
+The product cannot read hidden Codex, Claude, Cursor, or IDE conversation
+windows. A current task or next step persists once explicitly recorded, but it
+cannot be inferred reliably from a conversation it does not own.
 
-### 1. `ctx_get(project?, repo_path?, view?="full")`
-- `project` given → use it. `project` omitted + `repo_path` → **auto-resolve**
-  (folds `ctx_resolve`). Neither → error with a hint.
-- `project` given but `repo_path` mismatches the stored one → `safety.warning` in
-  the result (folds `ctx_strict_get` as a soft warning the caller heeds).
-- `view`: `full` | `brief` | `detailed`. `detailed` returns full verbatim history
-  + notes + docs (folds `ctx_history`).
-- Returns buckets + git (offloaded to a thread) + the `instructions` doc + a docs
-  index.
+## Scope
 
-### 2. `ctx_update(project?, session_summary?, tool_name, repo_path?, author?, files?)`
-- Project resolution + `_auto_init_guard` as today.
-- `repo_path` → auto-links / inits (folds `ctx_link`). Empty `session_summary` +
-  `repo_path` → pure link/init, no bucket write.
-- `author` present → also stored as a `project_message` and merged (folds
-  `ctx_note`).
-- `files` present → registered into MAP (folds `ctx_map`).
+In scope for `v0.1.0-alpha.1`:
 
-### 3. `ctx_doc(project, kind, content?, action?)` — unchanged
-- Verbatim per-project docs (`plan` / `instructions` / `context` / `handoff` / …).
-- **Handoff convention:** `kind="handoff"` holds a fuller narrative snapshot for
-  switching tools — no new tool required.
+- Windows, macOS, and Linux binaries for amd64 and arm64 where supported.
+- One-command repository enrollment and background refresh.
+- Filesystem events plus periodic Git reconciliation.
+- Deterministic and optional LLM handoffs.
+- Ollama, OpenAI-compatible, Anthropic, and Gemini providers.
+- Safe Codex and Claude Code integration files.
+- Clear health, repair, pause, resume, and uninstall paths.
 
-### 4. `ctx_search(query, project?)`
-- Cross-project search; add an optional `project` scope (also serves the later
-  privacy-scoping work).
+Out of scope for the alpha:
 
-### 5. `how_to_ctx()` — rewritten
-- Guide rewritten for the 5-tool workflow, including the **save handoff / load
-  handoff** pattern.
+- MCP as a core data path.
+- Chat-history scraping or automatic private-session import.
+- Cloud sync, team sharing, embeddings/RAG, and a desktop GUI.
+- Automatic edits by an LLM.
+- Marketplace package-manager distribution before release artifacts are proven.
 
-## Removed from MCP, kept in the CLI (capability preserved)
+## Architecture
 
-`ctx_export`, `ctx_import`, `ctx_reset`, `ctx_list` → human backup/admin ops.
-They stay as `ctx export|import|reset|list`; they leave the model's tool list.
+Use one Go binary. It owns the terminal UI, watcher, scheduler, Git inspection,
+state registry, artifact generation, provider HTTP clients, and OS service
+adapters. Do not add Python unless a future model feature has a concrete,
+measured dependency that cannot be handled in Go.
 
-## Cut (scope creep)
+```text
+filesystem events      periodic Git reconciliation
+        |                         |
+        +---- debounce + dedupe ---+
+                                  |
+                         evidence compiler
+                    Git + anchors + task state
+                                  |
+                         deterministic context.md
+                                  |
+                       optional bounded LLM call
+                                  |
+                          derived llm-context.md
+                                  |
+                   Codex skill / Claude slash command
+```
 
-`ctx_bug` → the tool is removed. The `bugs` table is kept for data continuity +
-export, and `ctx_get` still displays existing bug rows if present. Track new bugs
-via a note or `ctx_doc(kind="bugs")`.
+State rules:
 
-## Folded away (deleted as standalone tools)
+- The global registry is user-scoped and versioned. It stores project paths,
+  service state, provider choice, and model name, never API keys.
+- API keys come only from environment variables or an OS-backed secret provider
+  added in a later milestone.
+- Project writes use atomic replace. Readers must always see a complete file.
+- Fingerprints represent deterministic evidence only, including diff content.
+- Input, output, changed-file count, diff size, scan duration, and concurrent
+  work all have hard bounds.
 
-| Old tool | New form |
-|----------|----------|
-| `ctx_resolve(path)` | `ctx_get(repo_path=path)` |
-| `ctx_strict_get(p, path)` | `ctx_get(p, repo_path=path)` + heed `safety.warning` |
-| `ctx_link(p, path)` | `ctx_update(p, repo_path=path)` (empty summary) |
-| `ctx_note(p, msg, author)` | `ctx_update(p, session_summary=msg, author=author)` |
-| `ctx_map(p, files)` | `ctx_update(p, files=[...])` |
-| `ctx_history(p)` | `ctx_get(p, view="detailed")` |
-| `ctx_bug(...)` | a note, or `ctx_doc(p, "bugs", ...)` |
-| `ctx_export/import/reset/list` | CLI: `ctx export\|import\|reset\|list` |
+## Provider contract
 
-## The handoff (the headline feature — zero new tools)
+Provider configuration is explicit and local:
 
-Two fast steps, identical across all tools because they're just MCP calls:
+```text
+/llm ollama [model]
+/llm api <model> [base-url]
+/llm claude <model> [base-url]
+/llm gemini <model> [base-url]
+/llm off
+```
 
-- **Tool A, when switching:** "save handoff" → one `ctx_update` (current state,
-  next step) + optionally one `ctx_doc(kind="handoff")` for the narrative.
-- **Tool B, seconds later:** "load handoff" → `ctx_get(repo_path=".")` →
-  auto-resolves the project and returns everything, including the handoff doc.
+- Ollama is the default private option and must work offline.
+- API providers are opt-in per user. The CLI states that repository excerpts
+  will leave the machine before enabling one.
+- Common credential-file paths and token-shaped values are excluded or redacted
+  before a remote request. This is defense in depth, not a privacy guarantee.
+- Every call has input caps, output caps, a timeout, cancellation, and a
+  provider-specific error message.
+- Provider failure writes a valid deterministic context and a visible warning;
+  it never blocks the daemon.
+- Provider adapters are tested with contract fixtures and an opt-in live smoke
+  test that uses a user-provided key outside CI.
 
-Timestamps are already on every entry; user messages have a verbatim home
-(notes). This delivers the instant-switch experience without the impossible
-full-transcript capture.
+## Delivery milestones
 
-## Implementation steps
+### 0. Repository reset and alpha boundary
 
-1. **`ctx/server.py`** — rewrite `handle_list_tools` to declare only the 5 tools
-   with folded params. Rewrite `handle_call_tool`: `get` (resolve + warn),
-   `update` (author/files/link folding), `doc`, `search(+project)`, `how_to_ctx`.
-   Delete the removed handlers; keep the underlying DB functions.
-2. **`ctx/git.py`** — reduce 6 subprocess calls → 2
-   (`git status --porcelain=v1 --branch` for branch + changes in one call,
-   `git log -5` for commits). Keep the 0.5.2 hardening (stdin=DEVNULL,
-   CREATE_NO_WINDOW, thread offload, `CTX_DISABLE_GIT`).
-3. **`ctx/llm.py`** — keep local merge; small robustness: stop NOW-extraction from
-   splitting on the `.` in version numbers. (Low priority.)
-4. **`how_to_ctx` text + `SERVER_INSTRUCTIONS`** — rewrite for the 5-tool flow +
-   the handoff pattern.
-5. **`ctx/cli.py`** — unchanged; verify `list/export/import/reset` still work.
-6. **`tests/`** — rework tool-facing tests to the 5-tool surface; keep DB-layer
-   tests. Add fold-behavior tests: `update+author` == old note; `update+files` ==
-   old map; `get` without project == resolve; `get` mismatch == warning;
-   `get view=detailed` == history.
-7. **Docs** — rewrite README + INSTALLATION_GUIDE to a 5-tool table + the
-   migration table above. Update `CLAUDE.md` architecture/invariants.
-8. **Version 0.6.0.** Build, `twine check`. User publishes + pushes the tag.
+- Track all Go source, tests, modules, CI, release configuration, and docs.
+- Archive or remove root MCP/Python artifacts, debug launchers, caches,
+  distributions, backups, and stale local state. Preserve user data by moving
+  it to an explicit archive before deletion.
+- Add `LICENSE`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`,
+  `CHANGELOG.md`, and an alpha support statement.
+- Rename/document the product as a new non-MCP release line. Do not reuse
+  `0.7.0` or present it as an upgrade path.
 
-## Standing reliability invariant
+Acceptance: `git clone` followed by documented build and tests produces the
+same CLI on a clean machine. `git status` contains no generated product output.
 
-No blocking I/O on the event loop, ever; tight time budgets; degrade gracefully
-(return partial, never hang). Git was the first instance (fixed in 0.5.2); this
-is now a rule for every new code path.
+### 1. Artifact and state correctness
+
+- Registry schema v2 includes a tested v1 forward migration. `project.json`
+  remains backward-readable for v1 and is rewritten as v2 on the next compile;
+  unknown future schemas fail safely with an explicit error.
+- Persist the last processed Git base and retain the latest meaningful change
+  summary after commits, not only dirty working-tree details.
+- Preserve task, next-step, decision, and handoff fields until superseded.
+- Detect non-Git folders deliberately, with a reduced file-based mode or a
+  clear unsupported error.
+- Add a `validate` command that checks artifacts, permissions, paths, and
+  schema without changing state.
+
+Acceptance: commits, renames, deletes, empty working trees, missed events,
+restarts, and provider failures preserve a correct handoff with no duplicate
+or partial artifact writes.
+
+### 2. Daemon reliability and OS lifecycle
+
+- Create one lifecycle interface with implementations for Windows Task
+  Scheduler, macOS LaunchAgent, and Linux systemd user service.
+- Add install, status, restart, uninstall, and repair commands. Startup setup
+  is always explicit and reversible.
+- Replace silent watcher failures with structured logs and visible project
+  health states. Reconcile after overflow, permission failure, or wake-from-
+  sleep.
+- Add single-instance locking with stale-lock validation, graceful shutdown,
+  bounded queues, crash restart policy, and exponential backoff for providers.
+- Add a low-frequency reconciliation scan that cannot overlap with itself.
+
+Acceptance: the service survives restart, sleep/wake, provider outage, a
+deleted project folder, and a missed watch event without corrupting artifacts.
+
+### 3. Production CLI experience
+
+- Keep the command palette as the default UI: `/add`, `/status`, `/integrate`,
+  `/llm`, `/pause`, `/resume`, `/repair`, `/logs`, `/uninstall`, `/help`.
+- Add non-interactive equivalents with stable exit codes and JSON output for
+  automation.
+- Show project health, last successful compile, last meaningful change,
+  provider state, artifact paths, queue state, and actionable errors.
+- Respect `NO_COLOR`, provide plain output when piped, and avoid color as the
+  only status signal.
+- Add safe folder selection, validation, and confirmation before writing a tool
+  integration or startup service.
+
+Acceptance: a new user registers a project, enables a provider, installs one
+assistant bridge, and verifies health without reading a separate guide.
+
+### 4. Tool adapters and context continuity
+
+- Codex adapter installs a small global skill that resolves the active
+  workspace and reads `.one-context/context.md` plus optional
+  `llm-context.md`.
+- Claude Code adapter installs a project-local `/one-context` command without
+  modifying existing `CLAUDE.md`.
+- Add adapters only when their integration format is documented and tested.
+- Provide an explicit, one-action way to record task/next-step/handoff state
+  from the palette and supported assistants. Do not pretend this can happen
+  from inaccessible private chats.
+- Test existing project instruction files, paths with spaces, nested repos, and
+  missing artifacts.
+
+Acceptance: Codex and Claude Code both load the correct current project
+handoff without duplicate context storage or instruction-file overwrite.
+
+### 5. LLM quality, privacy, and cost controls
+
+- Create a versioned evaluation corpus of representative diffs, commits,
+  tasks, sensitive-looking source, no-change runs, and provider failures.
+- Score factual coverage, unsupported claims, omission rate, output length,
+  latency, and token cost against deterministic baseline artifacts.
+- Add redaction rules for obvious secrets before an API request, with a clear
+  statement that redaction is defense-in-depth rather than a guarantee.
+- Add input-size preview. The global kill switch (`/llm off`), daily request
+  budget (`/llm limit <n>`), and per-project LLM allow/deny control
+  (`config <project> --llm on|off`) are implemented.
+- Record provider/model/version, duration, input size, output size, and error
+  class without logging source excerpts or credentials.
+
+Acceptance: no provider becomes the default until it passes a fixed factuality
+threshold and all failure cases leave deterministic output valid.
+
+### 6. Cross-platform packaging and release engineering
+
+- Build reproducible archives for Windows, macOS, and Linux with checksums.
+- Sign release artifacts and publish provenance/SBOM data.
+- Test Windows x64/arm64, macOS x64/arm64, and Linux x64/arm64 where runners
+  are available. Do not claim an architecture that was not tested.
+- Add clean-install smoke tests for every archive: install, add a sample repo,
+  trigger an edit, restart service, inspect both artifacts, uninstall.
+- Publish GitHub release archives first. Add winget, Homebrew, and Linux package
+  distribution only after their installers and update paths are exercised.
+
+Acceptance: an external tester installs a signed binary, completes the primary
+flow, upgrades once, and uninstalls without leftover service processes.
+
+### 7. Public alpha release gate
+
+- Require a clean working tree and all product source tracked before tagging.
+- Run hosted CI on the exact release commit: formatting, unit, integration,
+  race, static analysis, dependency audit, secret scan, artifact smoke tests,
+  and cross-platform matrix.
+- Require manual acceptance on each OS for CLI readability, daemon lifecycle,
+  tool adapter behavior, and provider-off fallback.
+- Publish privacy, data-handling, retention, supported-platform, and known
+  limitations documents with the release.
+- Tag only after review of release notes, checksums, SBOM/provenance, and the
+  rollback/uninstall procedure.
+
+Acceptance: `v0.1.0-alpha.1` is a traceable, signed, reproducible release with
+known limitations stated publicly.
+
+## Test strategy
+
+- Unit: parsing, fingerprinting, state migrations, path validation, artifact
+  rendering, provider response parsing, redaction, and CLI exit codes.
+- Integration: real Git repositories covering commits, dirty changes, renames,
+  deletes, ignored paths, nested directories, and project paths with spaces.
+- Daemon: file events, event overflow, debounce, reconciliation, service
+  restart, stale lock, cancellation, and concurrent project updates.
+- Provider: local mock contracts in CI; opt-in live smoke tests outside CI.
+- End-to-end: clean install on every target OS and assistant adapter fixtures.
+- Quality: LLM evaluation corpus must compare each model against deterministic
+  evidence and reject unsupported factual claims.
+
+## Non-negotiable release gates
+
+Do not tag or market a production release until all are true:
+
+1. Source, tests, release configuration, and documentation are tracked and a
+   clean clone builds on supported platforms.
+2. Hosted CI passes on the release commit, including race tests and artifact
+   smoke tests.
+3. The daemon has logs, repair/uninstall procedures, and explicit recovery from
+   watcher/provider failure.
+4. LLM output is evaluated, optional, bounded, and unable to corrupt factual
+   context.
+5. API keys never enter the repository, registry, generated artifacts, logs,
+   crash bundles, or support exports.
+6. Signed artifacts, checksums, SBOM/provenance, release notes, privacy policy,
+   and known limitations are published.
+
+## Version policy
+
+- `v0.1.x-alpha`: breaking changes are allowed with migration notes.
+- `v0.2.x-beta`: installer and artifact formats stabilize; upgrades are tested.
+- `v1.0.0`: only after the release gates above pass over multiple public beta
+  releases and the context artifact contract is stable.
