@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/1.png" alt="Logo" width="180">
+  <img src="assets/1.png" alt="one-context logo" width="420">
+</p>
+
+<p align="center">
+  <img src="assets/screen.png" alt="one-context CLI" width="900">
 </p>
 
 
@@ -11,9 +15,6 @@ It is being shaped around a simple workflow:
 - compress meaningful changes into a small context artifact
 - let Claude, Codex, or another assistant read that artifact directly
 
-<p align="center">
-  <img src="assets/screen.png" alt="Socratic Logo" width="180">
-</p>
 
 ## Product direction
 
