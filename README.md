@@ -1,11 +1,6 @@
 <p align="center">
-  <img src="assets/1.png" alt="one-context logo" width="420">
+  <img src="assets/1.png" alt="one-context logo" width="520">
 </p>
-
-<p align="center">
-  <img src="assets/screen.png" alt="one-context CLI" width="900">
-</p>
-
 
 one-context is a local background service that keeps project context compact and current.
 It is being shaped around a simple workflow:
@@ -15,6 +10,9 @@ It is being shaped around a simple workflow:
 - compress meaningful changes into a small context artifact
 - let Claude, Codex, or another assistant read that artifact directly
 
+<p align="center">
+  <img src="assets/screen.png" alt="one-context CLI" width="900">
+</p>
 
 ## Product direction
 
