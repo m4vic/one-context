@@ -11,6 +11,10 @@ It is being shaped around a simple workflow:
 - compress meaningful changes into a small context artifact
 - let Claude, Codex, or another assistant read that artifact directly
 
+<p align="center">
+  <img src="assets/screen.png" alt="Socratic Logo" width="180">
+</p>
+
 ## Product direction
 
 - one command starts an onboarding flow, registers folders, starts the local
