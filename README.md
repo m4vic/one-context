@@ -2,8 +2,30 @@
   <img src="assets/1.png" alt="one-context logo" width="520">
 </p>
 
+> [!WARNING]
+> ## Experimental Alpha
+>
+> one-context is an experimental local context compiler. It is a research and
+> learning project, not a production-ready context-management system.
+>
+> The current `v0.1.0-alpha.1` release explores automatic repository watching,
+> deterministic project handoffs, optional LLM compression, and Claude/Codex
+> integrations. These ideas are still being validated in real development
+> workflows.
+>
+> Do not rely on one-context for critical workflows, sensitive repositories, or
+> irreplaceable engineering history without testing it independently first.
+>
+> Development of the current compiler direction may pause or change while a more
+> focused architecture-evolution skill is evaluated. There is no compatibility
+> guarantee with the legacy MCP/Python implementation or future experiments.
+>
+> Issues, feedback, and real-world failure reports are welcome.
+>
+> 
 one-context is a local background service that keeps project context compact and current.
 It is being shaped around a simple workflow:
+> 
 
 - auto-discover or register repos once
 - watch them in the background
