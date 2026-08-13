@@ -9,7 +9,7 @@
 > deterministic project handoffs, optional LLM compression, and Claude/Codex
 > integrations. These ideas are still being validated in real development
 > workflows.
->
+
 > Do not rely on one-context for critical workflows, sensitive repositories, or
 > irreplaceable engineering history without testing it independently first.
 >
