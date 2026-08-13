@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="assets/1.png" alt="one-context logo" width="520">
-</p>
 
 > [!WARNING]
 > ## Experimental Alpha
@@ -22,6 +19,11 @@
 >
 > Issues, feedback, and real-world failure reports are welcome.
 >
+
+<p align="center">
+  <img src="assets/1.png" alt="one-context logo" width="520">
+</p>
+
 > 
 one-context is a local background service that keeps project context compact and current.
 It is being shaped around a simple workflow:
